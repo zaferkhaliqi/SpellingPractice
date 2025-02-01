@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spelling Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }   
+        .hint-letter {
+            position: relative;
+            display: inline-block;
+            padding: 0 2px;
+        }
+        .hint-letter::after {
+            content: "";
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #afff10;
+            animation: underline 0.3s ease-out;
+        }
+        @keyframes underline {
+            from { transform: scaleX(0); }
+            to { transform: scaleX(1); }
+        }
+        .tab-hint {
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .tab-hint.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen font-['Inter'] text-gray-100">
+    <div class="container mx-auto px-4 py-8 max-w-3xl">
+        <!-- Input Screen -->
+        <div id="inputScreen" class="glass-panel p-8 mb-8">
+            <h1 class="text-4xl font-bold mb-6 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Spelling Master
+            </h1>
+            
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Words List (You can add your own word list)</label>
+                    <textarea 
+                        id="wordsInput" 
+                        class="w-full bg-gray-800 rounded-lg p-4 font-mono text-sm border border-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        rows="4"
+                    >['Pronunciation', 'Wednesday', 'Library', 'February']</textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2">Meanings (You can add your own meaning list)</label>
+                    <textarea 
+                        id="meaningsInput" 
+                        class="w-full bg-gray-800 rounded-lg p-4 font-mono text-sm border border-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        rows="4"
+                    >['Telaffuz', 'Çarşamba', 'Kütüphane', 'Şubat']</textarea>
+                </div>
+
+                <button 
+                    onclick="startPractice()"
+                    class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium py-3 px-6 rounded-lg transition-all transform hover:scale-[1.02]"
+                >
+                    Start Practice
+                </button>
+            </div>
+        </div>
+
+        <!-- Practice Screen -->
+        <div id="practiceScreen" class="glass-panel p-8 hidden">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-xl font-semibold">Practice Session</h2>
+                <div id="progress" class="text-sm text-gray-400"></div>
+            </div>
+
+            <div class="space-y-8">
+                <div class="text-center">
+                    <div id="meaning" class="text-lg font-medium text-purple-300 mb-4"></div>
+                    <button 
+                        onclick="speakCurrentWord()"
+                        class="inline-flex items-center bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg transition-colors"
+                    >
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M6.343 9.657L14 2l1.414 1.414-7.657 7.657 7.657 7.657-1.414 1.414-7.657-7.657z"/>
+                        </svg>
+                        Repeat Word
+                    </button>
+                </div>
+
+                <div>
+                    <input 
+                        id="spellingInput"
+                        type="text" 
+                        class="w-full bg-gray-800 rounded-lg px-6 py-4 text-lg text-center font-medium focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Type the word you heard..."
+                        onkeydown="handleKeyDown(event)"
+                    >
+                </div>
+
+                <div id="hint" class="text-center text-lg font-mono space-x-1 min-h-[2rem]"></div>
+
+                <div id="tabHint" class="tab-hint text-center text-sm text-gray-400">
+                    Press <kbd class="bg-gray-700 px-2 py-1 rounded-md">Tab</kbd> to move to the next word
+                </div>
+
+                <button 
+                    id="checkBtn"
+                    onclick="checkSpelling()"
+                    class="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 px-6 rounded-lg transition-colors"
+                >
+                    Check Spelling
+                </button>
+
+                <button 
+                    id="nextBtn"
+                    onclick="nextWord()"
+                    class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-6 rounded-lg transition-colors hidden"
+                >
+                    Next Word
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let words = [];
+        let meanings = [];
+        let currentWordIndex = 0;
+        let synth = window.speechSynthesis;
+
+        function parsePythonList(input) {
+            try {
+                return JSON.parse(input.replace(/'/g, '"'));
+            } catch (e) {
+                alert('Invalid format! Please use proper Python list format.');
+                throw e;
+            }
+        }
+
+        function startPractice() {
+            try {
+                words = parsePythonList(document.getElementById('wordsInput').value);
+                meanings = parsePythonList(document.getElementById('meaningsInput').value);
+                
+                if (words.length !== meanings.length) {
+                    alert('Number of words and meanings must match!');
+                    return;
+                }
+
+                words = words.map(word => word.toLowerCase().replace(/[^a-z]/g, ''));
+                
+                document.getElementById('inputScreen').classList.add('hidden');
+                document.getElementById('practiceScreen').classList.remove('hidden');
+                showCurrentWord();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function showCurrentWord() {
+            document.getElementById('progress').textContent = 
+                `${currentWordIndex + 1} of ${words.length}`;
+            document.getElementById('meaning').textContent = meanings[currentWordIndex];
+            document.getElementById('spellingInput').value = '';
+            document.getElementById('nextBtn').classList.add('hidden');
+            document.getElementById('checkBtn').classList.remove('hidden');
+            document.getElementById('hint').innerHTML = '';
+            document.getElementById('tabHint').classList.remove('visible');
+            document.getElementById('spellingInput').focus();
+            speakCurrentWord();
+        }
+
+        function speakCurrentWord() {
+            const utterance = new SpeechSynthesisUtterance(words[currentWordIndex]);
+            utterance.lang = 'en-US';
+            utterance.rate = 0.9;
+            synth.speak(utterance);
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                checkSpelling();
+            } else if (event.key === 'Tab' && document.getElementById('nextBtn').classList.contains('hidden') === false) {
+                event.preventDefault();
+                nextWord();
+            }
+        }
+
+        function checkSpelling() {
+            const input = document.getElementById('spellingInput').value.toLowerCase();
+            const correct = words[currentWordIndex];
+            const hintElement = document.getElementById('hint');
+            
+            if (input === correct) {
+                hintElement.innerHTML = `<span class="text-green-400">✓ Correct! Well done!</span>`;
+                document.getElementById('nextBtn').classList.remove('hidden');
+                document.getElementById('checkBtn').classList.add('hidden');
+                document.getElementById('tabHint').classList.add('visible');
+                return;
+            }
+
+            let hintHTML = '';
+            for (let i = 0; i < Math.max(input.length, correct.length); i++) {
+                const inputChar = input[i] || '';
+                const correctChar = correct[i] || '';
+                
+                if (inputChar === correctChar) {
+                    hintHTML += `<span>${correctChar}</span>`;
+                } else {
+                    hintHTML += `<span class="hint-letter text-pink-400">${correctChar || '_'}</span>`;
+                }
+            }
+            hintElement.innerHTML = hintHTML;
+        }
+
+        function nextWord() {
+            currentWordIndex++;
+            if (currentWordIndex >= words.length) {
+                alert('Practice session completed!');
+                window.location.reload();
+            } else {
+                showCurrentWord();
+            }
+        }
+    </script>
+</body>
+</html>
